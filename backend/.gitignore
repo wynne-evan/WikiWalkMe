@@ -1,0 +1,14 @@
+.env
+
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+__debug_bin
+
+.vscode/
+
+.DS_Store
+Thumbs.db
