@@ -59,7 +59,7 @@ func GetTargetsHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"count":  len(targets),
-		"target": targets,
+		"count":   len(targets),
+		"targets": targets,
 	})
 }
