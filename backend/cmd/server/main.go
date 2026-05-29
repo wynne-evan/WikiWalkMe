@@ -3,7 +3,9 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 	"wikiwalkme-backend/internal/api"
+	"wikiwalkme-backend/internal/wikidata"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -14,6 +16,9 @@ func main() {
 	if err != nil {
 		log.Println("No env file found, falling back to default")
 	}
+
+	wikiClient := wikidata.NewClient(30 * time.Minute)
+	apiCtx := &api.APIContext{WikiClient: wikiClient}
 
 	r := gin.Default()
 
@@ -29,7 +34,7 @@ func main() {
 		c.Next()
 	})
 
-	r.GET("api/targets", api.GetTargetsHandler)
-	r.POST("api/route", api.GenerateRouteHandler)
+	r.POST("/api/targets", apiCtx.GetTargetsHandler)
+	r.POST("/api/route", apiCtx.GenerateRouteHandler)
 	r.Run(":8080")
 }

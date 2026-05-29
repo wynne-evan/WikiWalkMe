@@ -8,6 +8,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type TargetRequest struct {
+	Lat    float64 `json:"lat" binding:"required"`
+	Lon    float64 `json:"lon" binding:"required"`
+	Radius float64 `json:"radius"`
+}
+
 type RouteRequest struct {
 	StartLat   float64 `json:"start_lat" binding:"required"`
 	StartLon   float64 `json:"start_lon" binding:"required"`
@@ -16,7 +22,11 @@ type RouteRequest struct {
 	MaxMinutes float64 `json:"max_minutes" binding:"required"`
 }
 
-func GenerateRouteHandler(c *gin.Context) {
+type APIContext struct {
+	WikiClient *wikidata.WikidataClient
+}
+
+func (api *APIContext) GenerateRouteHandler(c *gin.Context) {
 	var req RouteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -24,7 +34,7 @@ func GenerateRouteHandler(c *gin.Context) {
 	}
 
 	// 1. Fetch points around the starting area
-	targets, err := wikidata.FetchTargets(req.StartLat, req.StartLon, 3.0)
+	targets, err := api.WikiClient.FetchTargets(req.StartLat, req.StartLon, 3.0)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed fetching wikidata"})
 		return
@@ -36,23 +46,22 @@ func GenerateRouteHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, routeResult)
 }
 
-func GetTargetsHandler(c *gin.Context) {
-	var params struct {
-		Lat    float64 `form:"lat" binding:"required"`
-		Lon    float64 `form:"lon" binding:"required"`
-		Radius float64 `form:"radius"`
-	}
-
-	if err := c.ShouldBindQuery(&params); err != nil {
+func (api *APIContext) GetTargetsHandler(c *gin.Context) {
+	var req TargetRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing 'lat' or 'lon'"})
 		return
 	}
 
-	if params.Radius == 0 {
-		params.Radius = 2.0
+	if req.Radius == 0 {
+		req.Radius = 10.0
 	}
 
-	targets, err := wikidata.FetchTargets(params.Lat, params.Lon, params.Radius)
+	if req.Radius > 10.0 {
+		req.Radius = 10.0
+	}
+
+	targets, err := api.WikiClient.FetchTargets(req.Lat, req.Lon, req.Radius)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

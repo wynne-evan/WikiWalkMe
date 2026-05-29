@@ -86,10 +86,21 @@ export default function App() {
   useEffect(() => {
     if (!userPos) return;
 
-    const [lat, lon] = userPos;
-    const backendUrl = `http://localhost:8080/api/targets?lat=${lat}&lon=${lon}&radius=2.0`;
-
-    fetch(backendUrl)
+    const backendUrl = `http://localhost:8080/api/targets`;
+    const payload = {
+      lat: userPos[0],
+      lon: userPos[1],
+      radius: 10,
+    }
+    console.log(payload)
+    fetch(backendUrl,
+        {method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      }
+    )
       .then((res) => {
         if (!res.ok) throw new Error("Backend server error");
         return res.json();

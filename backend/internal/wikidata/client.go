@@ -26,19 +26,36 @@ type WikidataResponse struct {
 	} `json:"results"`
 }
 
-func FetchTargets(lat, lon, radius float64) ([]Target, error) {
+type WikidataClient struct {
+	Cache *MemoryCache
+}
+
+func NewClient(cacheTTL time.Duration) *WikidataClient {
+	return &WikidataClient{
+		Cache: NewMemoryCache(cacheTTL),
+	}
+}
+
+func (wc *WikidataClient) FetchTargets(lat, lon, radius float64) ([]Target, error) {
+	// Check cache
+	if cachedTargets, found := wc.Cache.Get(lat, lon); found {
+		return cachedTargets, nil
+	}
+
 	sparqURL := "https://query.wikidata.org/sparql"
 	query := fmt.Sprintf(`
-		SELECT ?item ?itemLabel ?coords WHERE {
+		SELECT ?item ?itemLabel ?coords ?distance WHERE {
 			SERVICE wikibase:around {
 				?item wdt:P625 ?coords .
 				bd:serviceParam wikibase:center "Point(%f %f)"^^geo:wktLiteral .
 				bd:serviceParam wikibase:radius "%f" .
-				}
-				MINUS { ?item wdt:P18 ?image .}
-			SERVICE wikibase:label { bd:serviceParam wikibase:language "[AUTO_LANGUAGE], en". }
-				}
-			LIMIT 100`,
+				bd:serviceParam wikibase:distance ?distance . # 1. Bind the calculated distance to ?distance
+			}
+			MINUS { ?item wdt:P18 ?image . }
+			SERVICE wikibase:label { bd:serviceParam wikibase:language "[AUTO_LANGUAGE],en". }
+		}
+		ORDER BY ASC(?distance) # 2. Sort from closest to furthest
+		LIMIT 100`,
 		lon, lat, radius)
 
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -86,5 +103,9 @@ func FetchTargets(lat, lon, radius float64) ([]Target, error) {
 			})
 		}
 	}
+
+	// Save to cache
+	wc.Cache.Set(lat, lon, targets)
+
 	return targets, nil
 }
