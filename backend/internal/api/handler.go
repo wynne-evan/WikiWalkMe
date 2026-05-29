@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"sort"
 	"wikiwalkme-backend/internal/routing"
 	"wikiwalkme-backend/internal/wikidata"
 
@@ -15,11 +16,13 @@ type TargetRequest struct {
 }
 
 type RouteRequest struct {
-	StartLat   float64 `json:"start_lat" binding:"required"`
-	StartLon   float64 `json:"start_lon" binding:"required"`
-	EndLat     float64 `json:"end_lat" binding:"required"`
-	EndLon     float64 `json:"end_lon" binding:"required"`
-	MaxMinutes float64 `json:"max_minutes" binding:"required"`
+	StartLat    float64 `json:"start_lat" binding:"required"`
+	StartLon    float64 `json:"start_lon" binding:"required"`
+	EndLat      float64 `json:"end_lat" binding:"required"`
+	EndLon      float64 `json:"end_lon" binding:"required"`
+	MaxMinutes  float64 `json:"max_minutes" binding:"required"`
+	TargetRadius float64 `json:"target_radius"`
+	MaxTargets  int     `json:"max_targets"`
 }
 
 type APIContext struct {
@@ -33,16 +36,37 @@ func (api *APIContext) GenerateRouteHandler(c *gin.Context) {
 		return
 	}
 
-	// 1. Fetch points around the starting area
-	targets, err := api.WikiClient.FetchTargets(req.StartLat, req.StartLon, 3.0)
+	if req.TargetRadius <= 0 {
+		req.TargetRadius = 5.0
+	}
+	if req.TargetRadius > 10.0 {
+		req.TargetRadius = 10.0
+	}
+
+	startTargets, err := api.WikiClient.FetchTargets(req.StartLat, req.StartLon, req.TargetRadius)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed fetching wikidata"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed fetching wikidata for start"})
 		return
 	}
 
-	// 2. Run the greedy path optimization
-	routeResult := routing.GenerateRoute(req.StartLat, req.StartLon, req.EndLat, req.EndLon, req.MaxMinutes, targets)
+	endTargets, err := api.WikiClient.FetchTargets(req.EndLat, req.EndLon, req.TargetRadius)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed fetching wikidata for end"})
+		return
+	}
 
+	allTargets := mergeTargets(startTargets, endTargets)
+
+	if req.MaxTargets > 0 && len(allTargets) > req.MaxTargets {
+		sort.Slice(allTargets, func(i, j int) bool {
+			iDist := routing.DistanceFlatEarth(req.StartLat, req.StartLon, allTargets[i].Lat, allTargets[i].Lon)
+			jDist := routing.DistanceFlatEarth(req.StartLat, req.StartLon, allTargets[j].Lat, allTargets[j].Lon)
+			return iDist < jDist
+		})
+		allTargets = allTargets[:req.MaxTargets]
+	}
+
+	routeResult := routing.GenerateRoute(req.StartLat, req.StartLon, req.EndLat, req.EndLon, req.MaxMinutes, allTargets)
 	c.JSON(http.StatusOK, routeResult)
 }
 
@@ -53,10 +77,9 @@ func (api *APIContext) GetTargetsHandler(c *gin.Context) {
 		return
 	}
 
-	if req.Radius == 0 {
+	if req.Radius <= 0 {
 		req.Radius = 10.0
 	}
-
 	if req.Radius > 10.0 {
 		req.Radius = 10.0
 	}
@@ -71,4 +94,19 @@ func (api *APIContext) GetTargetsHandler(c *gin.Context) {
 		"count":   len(targets),
 		"targets": targets,
 	})
+}
+
+func mergeTargets(startTargets, endTargets []wikidata.Target) []wikidata.Target {
+	targetByURL := make(map[string]wikidata.Target)
+	for _, target := range append(startTargets, endTargets...) {
+		if target.WikidataUrl == "" {
+			continue
+		}
+		targetByURL[target.WikidataUrl] = target
+	}
+	merged := make([]wikidata.Target, 0, len(targetByURL))
+	for _, target := range targetByURL {
+		merged = append(merged, target)
+	}
+	return merged
 }

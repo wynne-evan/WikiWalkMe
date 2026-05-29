@@ -55,7 +55,7 @@ func (wc *WikidataClient) FetchTargets(lat, lon, radius float64) ([]Target, erro
 			SERVICE wikibase:label { bd:serviceParam wikibase:language "[AUTO_LANGUAGE],en". }
 		}
 		ORDER BY ASC(?distance) # 2. Sort from closest to furthest
-		LIMIT 100`,
+		LIMIT 200`,
 		lon, lat, radius)
 
 	client := &http.Client{Timeout: 10 * time.Second}

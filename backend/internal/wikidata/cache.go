@@ -41,6 +41,7 @@ func (c *MemoryCache) Get(lat, lon float64) ([]Target, bool) {
 	}
 
 	if time.Now().After(item.expiresAt) {
+		delete(c.items, key)
 		return nil, false
 	}
 

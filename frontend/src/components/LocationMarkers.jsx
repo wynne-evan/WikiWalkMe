@@ -1,6 +1,6 @@
 import { Marker, Popup } from "react-leaflet"
 
-import { targetIcon, userIcon } from "./TargetIcon"
+import { targetIcon, userIcon, endpointIcon } from "./TargetIcon"
 
 export function UserMarker({ userPos }) {
     if (!userPos) return <></>
@@ -31,3 +31,12 @@ export function LocationMarker({ targets }) {
         </>
     )
 }
+
+export function EndpointMarker({endPos}) {
+    if (!endPos) { return <></> }
+
+    return (
+        <Marker position={endPos} icon={endpointIcon}>
+        </Marker>
+        )
+    }

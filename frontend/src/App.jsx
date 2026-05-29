@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 're
 import './App.css'
 
 import TimeSlider from './components/TimeSlider';
-import { LocationMarker, UserMarker } from './components/LocationMarkers';
+import { EndpointMarker, LocationMarker, UserMarker } from './components/LocationMarkers';
 import { targetIcon } from './components/TargetIcon';
 import { Route } from "./components/RouteOverlay";
 
@@ -143,8 +143,9 @@ export default function App() {
           </Marker>
         )}
 
-        <UserMarker userPos={userPos} />
         <LocationMarker targets={targets} />
+        <UserMarker userPos={userPos} />
+        <EndpointMarker endPos={endPos} />
 
         <Route linePos={linePos} />
       </MapContainer>
