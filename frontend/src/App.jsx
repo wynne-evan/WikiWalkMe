@@ -1,38 +1,16 @@
 import { useState, useEffect } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, Polyline } from 'react-leaflet'
-import L from 'leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
 import './App.css'
 
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+import TimeSlider from './components/TimeSlider';
+import { LocationMarker, UserMarker } from './components/LocationMarkers';
+import { targetIcon } from './components/TargetIcon';
+import { Route } from "./components/RouteOverlay";
 
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconUrl: markerIcon,
-  iconRetinaUrl: markerIcon2x,
-  shadowUrl: markerShadow,
-});
+import { useTargets } from './hooks/useTargets.js';
+import { useWalkingRoute } from './hooks/useWalkingRoute.js';
+import { defaultMapZoom, defaultMapCenter } from "./services/constants.js";
 
-// Blue user icon marker
-const userIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-  shadowUrl: markerShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
-
-// Red Photo target opportunities
-const targetIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-  shadowUrl: markerShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
 
 // Recenter map when user location is received
 function RecenterMap({ position }) {
@@ -54,127 +32,105 @@ function MapClickHandler({ onMapClick }) {
   return null;
 }
 
-
 export default function App() {
   const [userPos, setUserPos] = useState(null);
-  const [targets, setTargets] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [geoLoading, setGeoLoading] = useState(true);
+  const [geoError, setGeoError] = useState(null);
   const [endPos, setEndPos] = useState(null);
-  const [linePos, setLinePos] = useState([])
+  const [maxMinutes, setMaxMinutes] = useState(30);
+  const [debouncedMaxMinutes, setDebouncedMaxMinutes] = useState(30);
+
+  const { targets, targetsLoading, targetsError } = useTargets(userPos);
+  const { linePos, routeLoading, routeError } = useWalkingRoute(
+    userPos,
+    endPos,
+    debouncedMaxMinutes,
+  );
 
   // Get user location
   useEffect(() => {
     if (!navigator.geolocation) {
       setTimeout(() => {
-      setError("Geolocation is not supported by your browser");
-      setLoading(false);
+        setGeoError("Geolocation is not supported by your browser");
+        setGeoLoading(false);
       }, 0);
+      return;
     }
 
-    navigator.geolocation.getCurrentPosition( (position) => {
-      setUserPos([position.coords.latitude, position.coords.longitude]);
-      setLoading(false);
-    }, (err) => {
-      setError(`Failed to retrieve location: ${err.message}`);
-      setLoading(false);
-    },
-  {enableHighAccuracy: true});
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserPos([position.coords.latitude, position.coords.longitude]);
+        setGeoLoading(false);
+      },
+      (err) => {
+        setGeoError(`Failed to retrieve location: ${err.message}`);
+        setGeoLoading(false);
+      },
+      { enableHighAccuracy: true },
+    );
   }, []);
 
-  // Fetch targets from backend when user position is resolved
+  // Debounce max walking time changes
   useEffect(() => {
-    if (!userPos) return;
+    const timer = setTimeout(() => {
+      setDebouncedMaxMinutes(maxMinutes);
+    }, 500);
 
-    const backendUrl = `http://localhost:8080/api/targets`;
-    const payload = {
-      lat: userPos[0],
-      lon: userPos[1],
-      radius: 10,
-    }
-    console.log(payload)
-    fetch(backendUrl,
-        {method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      }
-    )
-      .then((res) => {
-        if (!res.ok) throw new Error("Backend server error");
-        return res.json();
-      })
-      .then((data) => {
-        console.log(data.targets);
-        setTargets(data.targets || []);
-      })
-      .catch((err) => {
-        console.error("Error fetching targets", err);
-      })
-  }, [userPos]);
+    return () => clearTimeout(timer);
+  }, [maxMinutes]);
 
-  useEffect(() => {
-    if (!userPos) return;
-    if (!endPos) return;
-
-    const max_minutes = 45;
-    const backendUrl = `http://localhost:8080/api/route`;
-    const payload = {
-      start_lat: userPos[0],
-      start_lon: userPos[1],
-      end_lat: endPos[0],
-      end_lon: endPos[1],
-      max_minutes: max_minutes
-    }
-
-
-    fetch(backendUrl,
-      {method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      }
-    )
-      .then((res) => {
-        if (!res.ok) throw new Error("Backend server error");
-        return res.json();
-      })
-      .then((data) => {
-        console.log(data)
-        const linePositions = [];
-        linePositions.push(userPos);
-        if (data.path) {
-        data.path.forEach(target => {
-          linePositions.push([target.lat, target.lon]);
-        }); 
-      }
-
-        linePositions.push(endPos);
-
-        setLinePos(linePositions);
-        })
-      .catch((err) => {
-        console.error("Error fetching route", err);
-    });
-  }, [userPos, endPos]);
-
-  if (loading) return <div style={{ padding: 20 }}>Locating you...</div>;
-  if (error) return <div style={{ padding: 20, color: 'red'}}>{error}</div>;
-
-  // Fallback location in downtown halifax
-  const defaultCenter = userPos || [44.6488, -63.5752];
-
-
+  const defaultCenter = userPos || defaultMapCenter;
+  const statusMessage =
+    geoError ||
+    targetsError ||
+    routeError ||
+    (geoLoading ? "Locating you..." :
+      targetsLoading ? "Loading nearby photo targets..." :
+      routeLoading ? "Generating route..." :
+      null);
 
   return (
-    <div style={{ height: '100vh', width: '100vw', position: 'relative'}}>
-      <MapContainer center={defaultCenter} zoom={14} style={{height: '100%', width: '100%'}}>
+    <div style={{ height: '100%', width: '100%', position: 'relative', overflow: 'hidden', margin: 0, padding: 0}}>
+      <MapContainer center={defaultCenter} zoom={defaultMapZoom} style={{height: '100%', width: '100%'}}>
         {/* OpenStreetMap public map tile layer */}
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
+
+        {/* Loading / error overlay */}
+        {statusMessage && (
+          <div style={{
+            position: 'absolute',
+            top: 20,
+            left: 20,
+            zIndex: 1000,
+            backgroundColor: 'rgba(255,255,255,0.95)',
+            padding: '12px 16px',
+            borderRadius: 8,
+            color: geoError || targetsError || routeError ? '#c00' : '#333',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+            pointerEvents: 'none',
+          }}>
+            {statusMessage}
+          </div>
+        )}
+
+        {!endPos && !geoLoading && !geoError && (
+          <div style={{
+            position: 'absolute',
+            top: 20,
+            right: 20,
+            zIndex: 1000,
+            backgroundColor: 'rgba(255,255,255,0.95)',
+            padding: '12px 16px',
+            borderRadius: 8,
+            color: '#333',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+            pointerEvents: 'none',
+          }}>
+            Click the map to set your destination.
+          </div>
+        )}
 
         {/* Dynamic map panning hook */}
         {userPos && <RecenterMap position={userPos} />}
@@ -187,39 +143,13 @@ export default function App() {
           </Marker>
         )}
 
-        {/* User current position marker (blue) */}
-        {userPos && (
-          <Marker position={userPos} icon={userIcon}>
-            <Popup><strong>You are here</strong></Popup>
-          </Marker>
-        )}
+        <UserMarker userPos={userPos} />
+        <LocationMarker targets={targets} />
 
-        {/* Photo target markers (red) */}
-        {targets.map((target, index) => (
-          <Marker key={index} position={[target.lat, target.lon]} icon={targetIcon}>
-            <Popup>
-              <div style={{ fontSize: '14px' }}>
-                <strong>{target.name}</strong>
-                <br />
-                <a href={target.wikidata_url} target="_blank" rel="noreferrer">
-                  View on Wikidata
-                </a>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-
-        {/* DRAW THE ROUTE LINE */}
-        {linePos.length > 1 && (
-          <Polyline 
-            positions={linePos} 
-            color="#3388ff"      // Nice clean blue line
-            weight={5}           // Thickness of the line in pixels
-            opacity={0.7}        // Slight transparency so streets show through
-            dashArray="10, 10"   // Makes it a dashed line to imply a walking trail
-          />
-        )}
+        <Route linePos={linePos} />
       </MapContainer>
+
+      <TimeSlider value={maxMinutes} onChange={setMaxMinutes} />
     </div>
   );
 }
