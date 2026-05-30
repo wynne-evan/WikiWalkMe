@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
 import './App.css'
 
@@ -6,6 +6,7 @@ import TimeSlider from './components/TimeSlider';
 import { EndpointMarker, LocationMarker, UserMarker } from './components/LocationMarkers';
 import { targetIcon } from './components/TargetIcon';
 import { Route } from "./components/RouteOverlay";
+import { RecenterButton } from './components/RecenterButton.jsx';
 
 import { useTargets } from './hooks/useTargets.js';
 import { useWalkingRoute } from './hooks/useWalkingRoute.js';
@@ -15,9 +16,11 @@ import { defaultMapZoom, defaultMapCenter } from "./services/constants.js";
 // Recenter map when user location is received
 function RecenterMap({ position }) {
   const map = useMap();
+  const hasCentered = useRef(false);
   useEffect(() => {
-    if (position) {
+    if (position && !hasCentered.current) {
       map.setView(position, 15);
+      hasCentered.current = true;
     }
   }, [position, map]);
   return null;
@@ -57,7 +60,7 @@ export default function App() {
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
+    const watchId = navigator.geolocation.watchPosition(
       (position) => {
         setUserPos([position.coords.latitude, position.coords.longitude]);
         setGeoLoading(false);
@@ -66,8 +69,14 @@ export default function App() {
         setGeoError(`Failed to retrieve location: ${err.message}`);
         setGeoLoading(false);
       },
-      { enableHighAccuracy: true },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 5000,
+        timeout: 10000,
+      }
     );
+    
+    return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
   // Debounce max walking time changes
@@ -147,7 +156,9 @@ export default function App() {
         <UserMarker userPos={userPos} />
         <EndpointMarker endPos={endPos} />
 
-        <Route linePos={linePos} />
+        <Route linePos={linePos} maxMinutes={maxMinutes} />
+
+        <RecenterButton userPos={userPos} />
       </MapContainer>
 
       <TimeSlider value={maxMinutes} onChange={setMaxMinutes} />
