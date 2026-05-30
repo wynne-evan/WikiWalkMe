@@ -16,23 +16,29 @@ type TargetRequest struct {
 }
 
 type RouteRequest struct {
-	StartLat    float64 `json:"start_lat" binding:"required"`
-	StartLon    float64 `json:"start_lon" binding:"required"`
-	EndLat      float64 `json:"end_lat" binding:"required"`
-	EndLon      float64 `json:"end_lon" binding:"required"`
-	MaxMinutes  float64 `json:"max_minutes" binding:"required"`
+	StartLat     float64 `json:"start_lat" binding:"required"`
+	StartLon     float64 `json:"start_lon" binding:"required"`
+	EndLat       float64 `json:"end_lat" binding:"required"`
+	EndLon       float64 `json:"end_lon" binding:"required"`
+	MaxMinutes   float64 `json:"max_minutes" binding:"required"`
 	TargetRadius float64 `json:"target_radius"`
-	MaxTargets  int     `json:"max_targets"`
+	MaxTargets   int     `json:"max_targets"`
 }
 
 type APIContext struct {
 	WikiClient *wikidata.WikidataClient
+	RouteCache *routing.RouteCache
 }
 
 func (api *APIContext) GenerateRouteHandler(c *gin.Context) {
 	var req RouteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if cachedRoute, found := api.RouteCache.Get(req.StartLat, req.StartLon, req.EndLat, req.EndLon, req.MaxMinutes); found {
+		c.JSON(http.StatusOK, cachedRoute)
 		return
 	}
 
@@ -67,6 +73,7 @@ func (api *APIContext) GenerateRouteHandler(c *gin.Context) {
 	}
 
 	routeResult := routing.GenerateRoute(req.StartLat, req.StartLon, req.EndLat, req.EndLon, req.MaxMinutes, allTargets)
+	api.RouteCache.Set(req.StartLat, req.StartLon, req.EndLat, req.EndLon, req.MaxMinutes, routeResult)
 	c.JSON(http.StatusOK, routeResult)
 }
 

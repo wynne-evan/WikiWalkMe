@@ -1,9 +1,4 @@
-import {
-  defaultPointSearchRadius,
-  targetsUrl,
-  routeUrl,
-  osrmUrl,
-} from "./constants.js";
+import { defaultPointSearchRadius, targetsUrl, routeUrl } from "./constants.js";
 
 export async function getTargets(userPos, signal) {
   if (!userPos) return [];
@@ -56,27 +51,5 @@ export async function getWalkingRoute(userPos, endPos, maxMinutes, signal) {
   }
 
   const data = await res.json();
-  const coordPairs = [];
-  coordPairs.push(`${userPos[1]},${userPos[0]}`);
-
-  if (data.path) {
-    data.path.forEach((target) => {
-      coordPairs.push(`${target.lon},${target.lat}`);
-    });
-  }
-
-  coordPairs.push(`${endPos[1]},${endPos[0]}`);
-
-  const osrmRes = await fetch(osrmUrl(coordPairs), { signal });
-  if (!osrmRes.ok) {
-    throw new Error("OSRM routing server error");
-  }
-
-  const osrmData = await osrmRes.json();
-  if (!osrmData.routes || osrmData.routes.length === 0) {
-    return [];
-  }
-
-  const jsonCoords = osrmData.routes[0].geometry.coordinates;
-  return jsonCoords.map((coord) => [coord[1], coord[0]]);
+  return data.route_points || [];
 }

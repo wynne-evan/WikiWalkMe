@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 	"wikiwalkme-backend/internal/api"
+	"wikiwalkme-backend/internal/routing"
 	"wikiwalkme-backend/internal/wikidata"
 
 	"github.com/gin-gonic/gin"
@@ -18,7 +19,11 @@ func main() {
 	}
 
 	wikiClient := wikidata.NewClient(30 * time.Minute)
-	apiCtx := &api.APIContext{WikiClient: wikiClient}
+	routeCache := routing.NewRouteCache(30 * time.Minute)
+	apiCtx := &api.APIContext{
+		WikiClient: wikiClient,
+		RouteCache: routeCache,
+	}
 
 	r := gin.Default()
 

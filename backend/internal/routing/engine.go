@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"fmt"
 	"math"
 	"sort"
 	"wikiwalkme-backend/internal/wikidata"
@@ -83,12 +84,18 @@ func GenerateRoute(startLat, startLon, endLat, endLon float64, maxMinutes float6
 		currLon = nextTarget.Lon
 	}
 
+	routePoints, err := FetchWalkingPath(startLat, startLon, endLat, endLon, path)
+	if err != nil {
+		fmt.Printf("OSRM fallback triggered: %v\n", err)
+		routePoints = buildRoutePoints(startLat, startLon, endLat, endLon, path)
+	}
+
 	return RouteResponse{
 		AllowedDistanceKm: allowedKm,
 		TravelDistanceKm:  travelKm + DistanceFlatEarth(currLat, currLon, endLat, endLon),
 		EstimatedMins:     (travelKm + DistanceFlatEarth(currLat, currLon, endLat, endLon)) / 4.5 * 60,
 		Path:              path,
-		RoutePoints:       buildRoutePoints(startLat, startLon, endLat, endLon, path),
+		RoutePoints:       routePoints,
 	}
 }
 
